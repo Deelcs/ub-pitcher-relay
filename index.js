@@ -1,56 +1,70 @@
 const express = require('express');
-const http = require('http');
+const https = require('https');   // ← Changed from http to https
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ←←← PUT YOUR SPORTradar INFO HERE ↓↓↓
-const SPORT_RADAR_PUSH_URL = 'https://api.sportradar.com/YOUR-FULL-PUSH-URL-HERE';  // ← replace this whole line
-const API_KEY = 'YOUR-SPORTRADAR-API-KEY-HERE';  // ← replace this
+// ←←← PUT YOUR REAL SPORTRADAR INFO HERE (exactly as Sportradar gave you)
+const SPORT_RADAR_PUSH_URL = 'https://push.sportradar.us/mlb/trial/stream/en/game/{game_id}/summary.json?api_key=AsOgWHeCj2tGlzYYeUMF7Nk0ovj6NKlClNXDtdC1
+';  
+const API_KEY = 'AsOgWHeCj2tGlzYYeUMF7Nk0ovj6NKlClNXDtdC1';
 
-let latestPitchData = { message: "Waiting for first pitch data..." };  // will hold the newest data
+let latestPitchData = { message: "Waiting for first pitch data from Sportradar..." };
 
-// Start the connection to Sportradar’s firehose
 function startPushStream() {
   console.log('Connecting to Sportradar Push...');
   
+  const url = new URL(SPORT_RADAR_PUSH_URL);
+  
   const options = {
+    hostname: url.hostname,
+    path: url.pathname + url.search,
     method: 'GET',
     headers: {
       'x-api-key': API_KEY
     }
   };
 
-  const req = http.request(SPORT_RADAR_PUSH_URL, options, (res) => {
-    console.log('Connected! Receiving live pitch data...');
+  const req = https.request(options, (res) => {
+    console.log('Connected to Sportradar! Receiving live pitch data...');
     
     res.on('data', (chunk) => {
       try {
-        const data = JSON.parse(chunk.toString().trim());
-        if (data && !data.heartbeat) {  // ignore heartbeats
-          latestPitchData = data;
-          console.log('New pitch data received!');
+        const text = chunk.toString().trim();
+        if (text) {
+          const data = JSON.parse(text);
+          // Ignore heartbeat messages that Sportradar sends
+          if (data && !data.heartbeat) {
+            latestPitchData = data;
+            console.log('New pitch data received and saved!');
+          }
         }
       } catch (e) {
-        // sometimes chunks are partial — ignore for now
+        // Partial chunks or non-JSON are normal with push streams — ignore
       }
+    });
+
+    res.on('end', () => {
+      console.log('Stream ended. Reconnecting in 5 seconds...');
+      setTimeout(startPushStream, 5000);
     });
   });
 
   req.on('error', (err) => {
-    console.error('Connection error, retrying in 10s...', err.message);
+    console.error('Connection error:', err.message);
+    console.log('Will retry in 10 seconds...');
     setTimeout(startPushStream, 10000);
   });
 
   req.end();
 }
 
-// API endpoint your Anything AI app will call
+// Your Anything AI app will call this endpoint
 app.get('/api/latest', (req, res) => {
   res.json(latestPitchData);
 });
 
 app.listen(PORT, () => {
-  console.log(`Relay server running on port ${PORT}`);
-  startPushStream();  // start the firehose immediately
+  console.log(`Relay server is running on port ${PORT}`);
+  startPushStream();   // Start the live connection right away
 });
