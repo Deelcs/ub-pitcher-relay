@@ -1,12 +1,12 @@
 const express = require('express');
-const https = require('https');
+const https = require('follow-redirects').https;  // This handles 302 redirects properly
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ←←← YOUR INFO (use the original URL Sportradar gave you)
-const SPORT_RADAR_PUSH_URL = 'https://api.sportradar.com/mlb/trial/stream/en/events/subscribe';  
-// Change to 'production' if your add-on is production level
+// ←←← YOUR INFO HERE
+const SPORT_RADAR_PUSH_URL = 'https://api.sportradar.com/mlb/trial/stream/en/events/subscribe';
+// Change 'trial' to 'production' if your add-on key is for production
 
 const API_KEY = 'AsOgWHeCj2tGlzYYeUMF7Nk0ovj6NKlClNXDtdC1';
 
@@ -15,7 +15,7 @@ let latestPitchData = {
 };
 
 function startPushStream() {
-  console.log('Connecting to Sportradar Push...');
+  console.log('Connecting to Sportradar Push (following redirect)...');
 
   const url = new URL(SPORT_RADAR_PUSH_URL);
 
@@ -26,27 +26,27 @@ function startPushStream() {
     headers: {
       'x-api-key': API_KEY
     },
-    // Important: Follow redirects automatically
-    maxRedirects: 5
+    maxRedirects: 5,           // Follow up to 5 redirects
+    followRedirects: true      // Important for the 302
   };
 
   const req = https.request(options, (res) => {
-    console.log(`✅ Connected! Final Status: ${res.statusCode}`);
+    console.log(`✅ Connected to final streaming endpoint! Status: ${res.statusCode}`);
 
     res.on('data', (chunk) => {
       try {
         const text = chunk.toString().trim();
-        if (text && text.length > 30) {  // Skip small heartbeats
+        if (text && text.length > 30) {   // Filter out tiny heartbeats
           const data = JSON.parse(text);
           
-          // Save real events (pitches, at-bats, game updates, etc.)
-          if (data && (data.payload || data.event || data.type === 'pitch' || data.game)) {
+          // Save real events (look for payload, event, pitch, etc.)
+          if (data && (data.payload || data.event || data.type || data.game)) {
             latestPitchData = data;
             console.log('🎯 REAL PITCH / GAME EVENT RECEIVED AND SAVED!');
           }
         }
       } catch (e) {
-        // Normal for streaming data chunks
+        // Normal with chunked streaming
       }
     });
 
@@ -64,7 +64,6 @@ function startPushStream() {
   req.end();
 }
 
-// This is what Anything AI will call
 app.get('/api/latest', (req, res) => {
   res.json(latestPitchData);
 });
