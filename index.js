@@ -1,20 +1,25 @@
 const express = require('express');
-const https = require('https');   // ← Changed from http to https
+const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ←←← PUT YOUR REAL SPORTRADAR INFO HERE 
-const SPORT_RADAR_PUSH_URL = 'https://api.sportradar.com/mlb/trial/stream/en/events/subscribe';
+// ←←← UPDATE THESE WITH YOUR EXACT INFO
+const SPORT_RADAR_PUSH_URL = 'https://api.sportradar.com/mlb/trial/stream/en/events/subscribe';  
+// Try 'production' or 'trial' depending on your access level. 
+// If you have a specific game filter, add ?match=sd:match:YOUR_GAME_ID at the end.
+
 const API_KEY = 'AsOgWHeCj2tGlzYYeUMF7Nk0ovj6NKlClNXDtdC1';
 
-let latestPitchData = { message: "Waiting for first pitch data from Sportradar..." };
+let latestPitchData = { 
+  message: "Connected to Sportradar Push. Waiting for real pitch/game events..." 
+};
 
 function startPushStream() {
-  console.log('Connecting to Sportradar Push...');
-  
+  console.log('Connecting to Sportradar Push API...');
+
   const url = new URL(SPORT_RADAR_PUSH_URL);
-  
+
   const options = {
     hostname: url.hostname,
     path: url.pathname + url.search,
@@ -25,45 +30,48 @@ function startPushStream() {
   };
 
   const req = https.request(options, (res) => {
-    console.log('Connected to Sportradar! Receiving live pitch data...');
-    
+    console.log(`✅ Connected! Status: ${res.statusCode} - Receiving live data...`);
+
     res.on('data', (chunk) => {
       try {
         const text = chunk.toString().trim();
-        if (text) {
+        if (text && text.length > 10) {   // Skip tiny heartbeats
           const data = JSON.parse(text);
-          // Ignore heartbeat messages that Sportradar sends
-          if (data && !data.heartbeat) {
+          
+          // Save meaningful payloads (game events, pitches, etc.)
+          if (data && (data.payload || data.event || data.game)) {
             latestPitchData = data;
-            console.log('New pitch data received and saved!');
+            console.log('🎯 Real pitch/game event received and saved!');
+          } 
+          // Heartbeat - just keep alive silently
+          else if (data.heartbeat) {
+            // console.log('❤️ Heartbeat received');
           }
         }
       } catch (e) {
-        // Partial chunks or non-JSON are normal with push streams — ignore
+        // Normal for streaming — ignore partial chunks
       }
     });
 
     res.on('end', () => {
-      console.log('Stream ended. Reconnecting in 5 seconds...');
-      setTimeout(startPushStream, 5000);
+      console.log('Stream ended. Reconnecting in 3 seconds...');
+      setTimeout(startPushStream, 3000);
     });
   });
 
   req.on('error', (err) => {
-    console.error('Connection error:', err.message);
-    console.log('Will retry in 10 seconds...');
+    console.error('❌ Connection error:', err.message);
     setTimeout(startPushStream, 10000);
   });
 
   req.end();
 }
 
-// Your Anything AI app will call this endpoint
 app.get('/api/latest', (req, res) => {
   res.json(latestPitchData);
 });
 
 app.listen(PORT, () => {
-  console.log(`Relay server is running on port ${PORT}`);
-  startPushStream();   // Start the live connection right away
+  console.log(`🚀 Push relay running on port ${PORT}`);
+  startPushStream();
 });
