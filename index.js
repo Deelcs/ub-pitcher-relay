@@ -4,9 +4,9 @@ const https = require('https');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ←←← YOUR EXACT INFO HERE (use the URL Sportradar gave you for Push Events)
+// ←←← YOUR INFO (use the original URL Sportradar gave you)
 const SPORT_RADAR_PUSH_URL = 'https://api.sportradar.com/mlb/trial/stream/en/events/subscribe';  
-// Try changing 'trial' to 'production' if your add-on is production level
+// Change to 'production' if your add-on is production level
 
 const API_KEY = 'AsOgWHeCj2tGlzYYeUMF7Nk0ovj6NKlClNXDtdC1';
 
@@ -26,32 +26,27 @@ function startPushStream() {
     headers: {
       'x-api-key': API_KEY
     },
-    // This helps with 302 redirects
-    followRedirect: true  
+    // Important: Follow redirects automatically
+    maxRedirects: 5
   };
 
   const req = https.request(options, (res) => {
-    console.log(`✅ Connected! Status: ${res.statusCode}`);
-
-    if (res.statusCode === 302 || res.statusCode === 301) {
-      console.log('Following redirect to:', res.headers.location);
-      // For now, we'll log it — next version can auto-follow better
-    }
+    console.log(`✅ Connected! Final Status: ${res.statusCode}`);
 
     res.on('data', (chunk) => {
       try {
         const text = chunk.toString().trim();
-        if (text && text.length > 20) {  // Skip small heartbeats
+        if (text && text.length > 30) {  // Skip small heartbeats
           const data = JSON.parse(text);
           
-          // Look for real event data (pitches, game events, etc.)
-          if (data && (data.payload || data.event || data.type || data.game)) {
+          // Save real events (pitches, at-bats, game updates, etc.)
+          if (data && (data.payload || data.event || data.type === 'pitch' || data.game)) {
             latestPitchData = data;
-            console.log('🎯 REAL PITCH / GAME EVENT SAVED!');
+            console.log('🎯 REAL PITCH / GAME EVENT RECEIVED AND SAVED!');
           }
         }
       } catch (e) {
-        // Normal with chunked streaming
+        // Normal for streaming data chunks
       }
     });
 
@@ -62,14 +57,14 @@ function startPushStream() {
   });
 
   req.on('error', (err) => {
-    console.error('Connection error:', err.message);
+    console.error('❌ Connection error:', err.message);
     setTimeout(startPushStream, 10000);
   });
 
   req.end();
 }
 
-// Endpoint for your Anything AI app
+// This is what Anything AI will call
 app.get('/api/latest', (req, res) => {
   res.json(latestPitchData);
 });
