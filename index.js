@@ -4,9 +4,8 @@ const https = require('https');   // ← Changed from http to https
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ←←← PUT YOUR REAL SPORTRADAR INFO HERE (exactly as Sportradar gave you)
-const SPORT_RADAR_PUSH_URL = 'https://push.sportradar.us/mlb/trial/stream/en/game/{game_id}/summary.json?api_key=AsOgWHeCj2tGlzYYeUMF7Nk0ovj6NKlClNXDtdC1
-';  
+// ←←← PUT YOUR REAL SPORTRADAR INFO HERE 
+const SPORT_RADAR_PUSH_URL = 'https://api.sportradar.com/mlb/trial/stream/en/events/subscribe';
 const API_KEY = 'AsOgWHeCj2tGlzYYeUMF7Nk0ovj6NKlClNXDtdC1';
 
 let latestPitchData = { message: "Waiting for first pitch data from Sportradar..." };
